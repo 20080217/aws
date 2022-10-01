@@ -9,6 +9,7 @@ import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
 import Dialog from '@mui/material/Dialog';
@@ -19,6 +20,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormGroup from '@mui/material/FormGroup';
 import FormLabel from '@mui/material/FormLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
@@ -71,7 +73,9 @@ export default function App() {
   const [liRegion, setLiRegion] = useState("");
   const [system, setSystem] = useState("");
   const [type, setType] = useState("");
+  const [ami, setAmi] = useState("");
   const [password, setPassword] = useState("");
+  const [userdata, setUserData] = useState("")
   const [gqRegion, setGqRegion] = useState("");
   const [ciRegion, setCiRegion] = useState("");
 
@@ -93,6 +97,7 @@ export default function App() {
   const [regionOfCheckedInstances, setRegionOfCheckedInstances] = useState("");
   const [idOfInstanceChangingIp, setIdOfInstanceChangingIp] = useState("");
   const [idOfInstanceTerminating, setIdOfInstanceTerminating] = useState("");
+  const [isShowAdvancedOptions, setIsShowAdvancedOptions] = useState(false);
 
   //Data States
   const [instances, setInstances] = useState([]);
@@ -137,7 +142,7 @@ export default function App() {
       setIsLaunchingInstance(false);
       return;
     }
-    if (system === "") {
+    if (!isShowAdvancedOptions && system === "") {
       showDialog("选择操作系统", "请选择操作系统后再试一次");
       setIsLaunchingInstance(false);
       return;
@@ -177,157 +182,175 @@ export default function App() {
         });
       }
       var ec2 = new AWS.EC2();
-      var imageName = ''
-      var imageOwner = ''
+
       var imageId = ''
-      if (system === 'Debian 10') {
-        imageName = 'debian-10-amd64-2022*'
-        imageOwner = '136693071363'
+      if (ami != "") {
+        imageId = ami;
       }
-      if (system === 'Debian 11') {
-        imageName = 'debian-11-amd64-2022*'
-        imageOwner = '136693071363'
-      }
-      if (system === 'Ubuntu 20.04') {
-        imageName = 'ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-2022*'
-        imageOwner = '099720109477'
-      }
-      if (system === 'Ubuntu 22.04') {
-        imageName = 'ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-2022*'
-        imageOwner = '099720109477'
-      }
-      if (system === 'Arch Linux') {
-        imageName = '*'
-        imageOwner = '647457786197'
-      }
-      var imageParams = {
-        Filters: [
-          {
-            Name: 'name',
-            Values: [
-              imageName
-            ]
-          },
-          {
-            Name: 'architecture',
-            Values: [
-              'x86_64'
-            ]
+      else {
+        var imageName = ''
+        var imageOwner = ''
+        if (system === 'Debian 10') {
+          imageName = 'debian-10-amd64-2022*';
+          imageOwner = '136693071363';
+        }
+        if (system === 'Debian 11') {
+          imageName = 'debian-11-amd64-2022*';
+          imageOwner = '136693071363';
+        }
+        if (system === 'Ubuntu 20.04') {
+          imageName = 'ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-2022*';
+          imageOwner = '099720109477';
+        }
+        if (system === 'Ubuntu 22.04') {
+          imageName = 'ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-2022*';
+          imageOwner = '099720109477';
+        }
+        if (system === 'Arch Linux') {
+          imageName = '*';
+          imageOwner = '647457786197';
+        }
+
+        var imageParams = {
+          Filters: [
+            {
+              Name: 'name',
+              Values: [
+                imageName
+              ]
+            },
+            {
+              Name: 'architecture',
+              Values: [
+                'x86_64'
+              ]
+            }
+          ],
+          Owners: [
+            imageOwner
+          ]
+        }
+        ec2.describeImages(imageParams, function (err, data) {
+          if (err) {
+            showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
+            setIsLaunchingInstance(false);
+            return;
           }
-        ],
-        Owners: [
-          imageOwner
-        ]
+          else {
+            imageId = data.Images[0].ImageId
+          }
+        });
       }
-      ec2.describeImages(imageParams, function (err, data) {
+
+      var keyName = String(Date.now())
+      var keyParams = {
+        KeyName: keyName
+      };
+      ec2.createKeyPair(keyParams, function (err, data) {
         if (err) {
           showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
           setIsLaunchingInstance(false);
+          return;
         }
-        else {
-          imageId = data.Images[0].ImageId
-          var keyName = String(Date.now())
-          var keyParams = {
-            KeyName: keyName
+      });
+
+      var groupId = ''
+      var sgParams = {
+        Description: keyName,
+        GroupName: keyName
+      }
+      ec2.createSecurityGroup(sgParams, function (err, data) {
+        if (err) {
+          showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
+          setIsLaunchingInstance(false);
+          return;
+        } else {
+          groupId = data.GroupId
+
+          var asgParams = {
+            GroupId: groupId,
+            IpPermissions: [
+              {
+                FromPort: 0,
+                IpProtocol: "tcp",
+                IpRanges: [
+                  {
+                    CidrIp: "0.0.0.0/0",
+                    Description: "All TCP"
+                  }
+                ],
+                ToPort: 65535
+              },
+              {
+                FromPort: 0,
+                IpProtocol: "udp",
+                IpRanges: [
+                  {
+                    CidrIp: "0.0.0.0/0",
+                    Description: "All UDP"
+                  }
+                ],
+                ToPort: 65535
+              },
+              {
+                FromPort: -1,
+                IpProtocol: "icmp",
+                IpRanges: [
+                  {
+                    CidrIp: "0.0.0.0/0",
+                    Description: "All ICMP"
+                  }
+                ],
+                ToPort: -1
+              },
+              {
+                FromPort: -1,
+                IpProtocol: "icmpv6",
+                IpRanges: [
+                  {
+                    CidrIp: "0.0.0.0/0",
+                    Description: "All ICMPV6"
+                  }
+                ],
+                ToPort: -1
+              }
+            ]
           };
-          ec2.createKeyPair(keyParams, function (err, data) {
+          ec2.authorizeSecurityGroupIngress(asgParams, function (err, data) {
             if (err) {
               showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
+              console.log(err);
               setIsLaunchingInstance(false);
+              return;
             } else {
-              var sgParams = {
-                Description: keyName,
-                GroupName: keyName
-              }
-              ec2.createSecurityGroup(sgParams, function (err, data) {
+
+              var userDataRaw = "#!/bin/bash\necho root:" + password + "|sudo chpasswd root\nsudo rm -rf /etc/ssh/sshd_config\nsudo tee /etc/ssh/sshd_config <<EOF\nClientAliveInterval 120\nSubsystem       sftp    /usr/lib/openssh/sftp-server\nX11Forwarding yes\nPrintMotd no\nChallengeResponseAuthentication no\nPasswordAuthentication yes\nPermitRootLogin yes\nUsePAM yes\nAcceptEnv LANG LC_*\nEOF\nsudo systemctl restart sshd\n" + userdata
+              var userData = btoa(userDataRaw)
+              var instanceParams = {
+                ImageId: imageId,
+                InstanceType: type,
+                KeyName: keyName,
+                MinCount: 1,
+                MaxCount: 1,
+                SecurityGroupIds: [
+                  groupId
+                ],
+                UserData: userData
+              };
+              ec2.runInstances(instanceParams, function (err, data) {
                 if (err) {
                   showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
                   setIsLaunchingInstance(false);
                 } else {
-                  var groupId = data.GroupId
-                  var asgParams = {
-                    GroupId: groupId,
-                    IpPermissions: [
-                      {
-                        FromPort: 0,
-                        IpProtocol: "tcp",
-                        IpRanges: [
-                          {
-                            CidrIp: "0.0.0.0/0",
-                            Description: "All TCP"
-                          }
-                        ],
-                        ToPort: 65535
-                      },
-                      {
-                        FromPort: 0,
-                        IpProtocol: "udp",
-                        IpRanges: [
-                          {
-                            CidrIp: "0.0.0.0/0",
-                            Description: "All UDP"
-                          }
-                        ],
-                        ToPort: 65535
-                      },
-                      {
-                        FromPort: -1,
-                        IpProtocol: "icmp",
-                        IpRanges: [
-                          {
-                            CidrIp: "0.0.0.0/0",
-                            Description: "All ICMP"
-                          }
-                        ],
-                        ToPort: -1
-                      },
-                      {
-                        FromPort: -1,
-                        IpProtocol: "icmpv6",
-                        IpRanges: [
-                          {
-                            CidrIp: "0.0.0.0/0",
-                            Description: "All ICMPV6"
-                          }
-                        ],
-                        ToPort: -1
-                      }
-                    ]
-                  };
-                  ec2.authorizeSecurityGroupIngress(asgParams, function (err, data) {
-                    if (err) {
-                      showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
-                      setIsLaunchingInstance(false);
-                    } else {
-                      var userDataRaw = "#!/bin/bash\necho root:" + password + "|sudo chpasswd root\nsudo rm -rf /etc/ssh/sshd_config\nsudo tee /etc/ssh/sshd_config <<EOF\nClientAliveInterval 120\nSubsystem       sftp    /usr/lib/openssh/sftp-server\nX11Forwarding yes\nPrintMotd no\nChallengeResponseAuthentication no\nPasswordAuthentication yes\nPermitRootLogin yes\nUsePAM yes\nAcceptEnv LANG LC_*\nEOF\nsudo systemctl restart sshd\n"
-                      var userData = btoa(userDataRaw)
-                      var instanceParams = {
-                        ImageId: imageId,
-                        InstanceType: type,
-                        KeyName: keyName,
-                        MinCount: 1,
-                        MaxCount: 1,
-                        SecurityGroupIds: [
-                          groupId
-                        ],
-                        UserData: userData
-                      };
-                      ec2.runInstances(instanceParams, function (err, data) {
-                        if (err) {
-                          showDialog("启动实例失败：" + err.name, "错误：" + err.message + " 请再试一次或联系支持");
-                          setIsLaunchingInstance(false);
-                        } else {
-                          showAlert("启动实例成功", "您的新实例id为" + data.Instances[0].InstanceId + "，请通过查询实例详细信息获得公网ip");
-                          setIsLaunchingInstance(false);
-                          setInstances([]);
-                        }
-                      });
-                    }
-                  });
+                  showAlert("启动实例成功", "您的新实例id为" + data.Instances[0].InstanceId + "，请通过查询实例详细信息获得公网ip");
+                  setIsLaunchingInstance(false);
+                  setInstances([]);
                 }
               });
+
             }
           });
+
         }
       });
     }
@@ -846,17 +869,11 @@ export default function App() {
   return (
     <div className="App">
       <div>
-        <Typography id="main-title" sx={{ m: 2 }} variant="h4">幻想世界の小店のAWS开机小助手</Typography>
+        <Typography id="main-title" sx={{ m: 2 }} variant="h4">Shizuku Launcher - AWS开机小助手</Typography>
       </div>
       <div>
         <Stack sx={{ m: 2 }} spacing={2} direction="row">
           <Link underline="hover" variant="body2" href="https://github.com/hiDandelion/shizuku-launcher-next">访问项目仓库</Link>
-        </Stack>
-      </div>
-      <div>
-        <Stack sx={{ m: 2 }} spacing={2} direction="row">
-          <Link color="secondary" underline="hover" variant="body2" href="https://32v.shop/buy/5">购买AWS 8vCPU</Link>
-          <Link color="secondary" underline="hover" variant="body2" href="https://32v.shop/buy/6">购买AWS 32vCPU</Link>
         </Stack>
       </div>
       <div>
@@ -990,6 +1007,13 @@ export default function App() {
         )
         }
       </div>
+      <div>
+        <FormGroup sx={{ m: 1 }} >
+          <FormControlLabel control={<Checkbox size="small" checked={isShowAdvancedOptions} onChange={(e) => {
+            setIsShowAdvancedOptions(e.target.checked);
+          }} />} label={<Typography variant="subtitle2">Advanced Options (Currently Only Local Mode)</Typography>} />
+        </FormGroup>
+      </div>
       <Collapse in={alertOpen}>
         <Alert severity="success" onClose={() => { setAlertOpen(false) }}>
           <AlertTitle>{alertTitle}</AlertTitle>
@@ -1027,26 +1051,42 @@ export default function App() {
             )}
           </Select>
         </FormControl>
-        <FormControl sx={{ m: 1, minWidth: 150 }} size="small">
-          <InputLabel id="select-region-label">操作系统</InputLabel>
-          <Select labelId="select-system-label" label="操作系统" value={system} onChange={e => {
-            setSystem(e.target.value);;
-          }}>
-            {systems.map((r, i) =>
-              <MenuItem key={i} value={r}>{r}</MenuItem>
-            )}
-          </Select>
-        </FormControl>
-        <FormControl sx={{ m: 1, minWidth: 150 }} size="small">
-          <InputLabel id="select-region-label">实例类型</InputLabel>
-          <Select labelId="select-type-label" label="实例类型" value={type} onChange={e => {
-            setType(e.target.value);
-          }}>
-            {types.map((r, i) =>
-              <MenuItem key={i} value={r}>{r}</MenuItem>
-            )}
-          </Select>
-        </FormControl>
+        {isShowAdvancedOptions ? (
+          <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+            <TextField label="AMI ID" variant="outlined" size="small" onChange={(e) => {
+              setAmi(e.target.value);
+            }} />
+          </FormControl>
+        ) : (
+          <FormControl sx={{ m: 1, minWidth: 150 }} size="small">
+            <InputLabel id="select-system-label">操作系统</InputLabel>
+            <Select labelId="select-system-label" label="操作系统" value={system} onChange={e => {
+              setSystem(e.target.value);;
+            }}>
+              {systems.map((r, i) =>
+                <MenuItem key={i} value={r}>{r}</MenuItem>
+              )}
+            </Select>
+          </FormControl>
+        )}
+        {isShowAdvancedOptions ? (
+          <FormControl sx={{ m: 1, minWidth: 150 }} size="small">
+            <TextField label="Instance Type" variant="outlined" size="small" onChange={(e) => {
+              setType(e.target.value);
+            }} />
+          </FormControl>
+        ) : (
+          <FormControl sx={{ m: 1, minWidth: 150 }} size="small">
+            <InputLabel id="select-type-label">实例类型</InputLabel>
+            <Select labelId="select-type-label" label="实例类型" value={type} onChange={e => {
+              setType(e.target.value);
+            }}>
+              {types.map((r, i) =>
+                <MenuItem key={i} value={r}>{r}</MenuItem>
+              )}
+            </Select>
+          </FormControl>
+        )}
         <div>
           <FormControl sx={{ m: 1, minWidth: 150 }}>
             <TextField label="密码" type="password" variant="outlined" size="small" onChange={(e) => {
@@ -1054,6 +1094,17 @@ export default function App() {
             }} />
           </FormControl>
         </div>
+        {isShowAdvancedOptions ? (
+          <div>
+            <FormControl sx={{ m: 1, minWidth: 200 }}>
+              <TextField label="User Data" variant="outlined" size="small" multiline onChange={(e) => {
+                setUserData(e.target.value);
+              }} />
+            </FormControl>
+          </div>
+        ) : (
+          <></>
+        )}
       </div>
       {isLaunchingInstance ? (<CircularProgress sx={{ m: 1 }} />) : (
         <div>
