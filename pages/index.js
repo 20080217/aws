@@ -1052,7 +1052,7 @@ export default function App() {
           </Select>
         </FormControl>
         {isShowAdvancedOptions ? (
-          <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+          <FormControl sx={{ m: 1, minWidth: 250 }} size="small">
             <TextField label="AMI ID" variant="outlined" size="small" onChange={(e) => {
               setAmi(e.target.value);
             }} />
@@ -1096,7 +1096,7 @@ export default function App() {
         </div>
         {isShowAdvancedOptions ? (
           <div>
-            <FormControl sx={{ m: 1, minWidth: 200 }}>
+            <FormControl sx={{ m: 1, minWidth: 600 }}>
               <TextField label="User Data" variant="outlined" size="small" multiline onChange={(e) => {
                 setUserData(e.target.value);
               }} />
