@@ -75,7 +75,8 @@ export default function App() {
   const [type, setType] = useState("");
   const [ami, setAmi] = useState("");
   const [password, setPassword] = useState("");
-  const [userdata, setUserData] = useState("")
+  const [diskSize, setDiskSize] = useState(8);
+  const [userdata, setUserdata] = useState("")
   const [gqRegion, setGqRegion] = useState("");
   const [ciRegion, setCiRegion] = useState("");
 
@@ -327,6 +328,14 @@ export default function App() {
               var userDataRaw = "#!/bin/bash\necho root:" + password + "|sudo chpasswd root\nsudo rm -rf /etc/ssh/sshd_config\nsudo tee /etc/ssh/sshd_config <<EOF\nClientAliveInterval 120\nSubsystem       sftp    /usr/lib/openssh/sftp-server\nX11Forwarding yes\nPrintMotd no\nChallengeResponseAuthentication no\nPasswordAuthentication yes\nPermitRootLogin yes\nUsePAM yes\nAcceptEnv LANG LC_*\nEOF\nsudo systemctl restart sshd\n" + userdata
               var userData = btoa(userDataRaw)
               var instanceParams = {
+                BlockDeviceMappings: [
+                  {
+                    DeviceName: "/dev/xvda",
+                    Ebs: {
+                      VolumeSize: diskSize
+                    }
+                  }
+                ],
                 ImageId: imageId,
                 InstanceType: type,
                 KeyName: keyName,
@@ -1096,9 +1105,20 @@ export default function App() {
         </div>
         {isShowAdvancedOptions ? (
           <div>
+            <FormControl sx={{ m: 1, minWidth: 150 }}>
+              <TextField label="Disk Size" variant="outlined" size="small" multiline onChange={(e) => {
+                setDiskSize(parseInt(e.target.value));
+              }} />
+            </FormControl>
+          </div>
+        ) : (
+          <></>
+        )}
+        {isShowAdvancedOptions ? (
+          <div>
             <FormControl sx={{ m: 1, minWidth: 600 }}>
               <TextField label="User Data" variant="outlined" size="small" multiline onChange={(e) => {
-                setUserData(e.target.value);
+                setUserdata(e.target.value);
               }} />
             </FormControl>
           </div>
